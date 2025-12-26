@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#1a1a2e">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Padel Score">
+  <meta name="application-name" content="Padel Score">
+  <meta name="description" content="Segnapunti vocale per partite di padel">
+  <meta name="mobile-web-app-capable" content="yes">
+  
+  <!-- Manifest -->
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- Icons -->
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+  <link rel="apple-touch-icon" sizes="144x144" href="icons/icon-144.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="icons/icon-120.png">
+  
+  <!-- Splash Screens iOS -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  
+  <title>🎾 Padel Score</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@400;600;700&display=swap');
+    
+    * {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      min-height: 100vh;
+      min-height: 100dvh;
+      overscroll-behavior: none;
+    }
+    
+    .score-font {
+      font-family: 'Orbitron', monospace;
+    }
+    
+    .glass {
+      background: rgba(255, 255, 255, 0.05);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    .pulse-mic {
+      animation: pulse-ring 1.5s ease-out infinite;
+    }
+    
+    @keyframes pulse-ring {
+      0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+      70% { box-shadow: 0 0 0 20px rgba(34, 197, 94, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+    }
+    
+    .team-blu {
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.3) 0%, rgba(37, 99, 235, 0.2) 100%);
+      border: 3px solid #3b82f6;
+    }
+    
+    .team-red {
+      background: linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(220, 38, 38, 0.2) 100%);
+      border: 3px solid #ef4444;
+    }
+    
+    .btn-press {
+      transition: transform 0.1s ease;
+    }
+    
+    .btn-press:active {
+      transform: scale(0.95);
+    }
+    
+    /* Install prompt banner */
+    .install-banner {
+      background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+      animation: slideDown 0.3s ease-out;
+    }
+    
+    @keyframes slideDown {
+      from { transform: translateY(-100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    
+    /* Offline indicator */
+    .offline-banner {
+      background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+    }
+    
+    /* Safe area for notch devices */
+    .safe-area-top {
+      padding-top: env(safe-area-inset-top);
+    }
+    
+    .safe-area-bottom {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  </style>
+</head>
+<body class="safe-area-top safe-area-bottom">
+  <div id="app"></div>
+  
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <script type="text/babel">
+    const { useState, useRef, useEffect } = React;
+
+    function PadelScorer() {
+      const [bluPoints, setBluPoints] = useState(0);
+      const [redPoints, setRedPoints] = useState(0);
+      const [bluGames, setBluGames] = useState(0);
+      const [redGames, setRedGames] = useState(0);
+      const [bluSets, setBluSets] = useState(0);
+      const [redSets, setRedSets] = useState(0);
+      const [isTieBreak, setIsTieBreak] = useState(false);
+      
+      const [team1Name, setTeam1Name] = useState(() => localStorage.getItem('team1Name') || 'BLU');
+      const [team2Name, setTeam2Name] = useState(() => localStorage.getItem('team2Name') || 'ROSSO');
+      const [showNameEditor, setShowNameEditor] = useState(false);
+      const [tempTeam1Name, setTempTeam1Name] = useState('');
+      const [tempTeam2Name, setTempTeam2Name] = useState('');
+      const [showVoicePanel, setShowVoicePanel] = useState(false);
+      const [availableVoices, setAvailableVoices] = useState([]);
+      const [selectedVoice, setSelectedVoice] = useState(null);
+      const [language, setLanguage] = useState(() => localStorage.getItem('language') || 'it');
+      const [showLanguagePanel, setShowLanguagePanel] = useState(false);
+      const [history, setHistory] = useState([]);
+      const [isListening, setIsListening] = useState(false);
+      const [lastCommand, setLastCommand] = useState('');
+      const [matchStatus, setMatchStatus] = useState('');
+      const [micStatus, setMicStatus] = useState('🎤 Premi per attivare');
+      
+      // PWA States
+      const [isOnline, setIsOnline] = useState(navigator.onLine);
+      const [showInstallPrompt, setShowInstallPrompt] = useState(false);
+      const [deferredPrompt, setDeferredPrompt] = useState(null);
+      const [isInstalled, setIsInstalled] = useState(false);
+      
+      const recognitionRef = useRef(null);
+
+      // PWA: Check if already installed
+      useEffect(() => {
+        if (window.matchMedia('(display-mode: standalone)').matches) {
+          setIsInstalled(true);
+        }
+        
+        // Listen for install prompt
+        const handleBeforeInstall = (e) => {
+          e.preventDefault();
+          setDeferredPrompt(e);
+          if (!isInstalled) {
+            setShowInstallPrompt(true);
+          }
+        };
+        
+        window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+        
+        // Online/Offline detection
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+        
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        
+        return () => {
+          window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+          window.removeEventListener('online', handleOnline);
+          window.removeEventListener('offline', handleOffline);
+        };
+      }, [isInstalled]);
+
+      // PWA: Install app
+      const installApp = async () => {
+        if (!deferredPrompt) return;
+        
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        
+        if (outcome === 'accepted') {
+          setIsInstalled(true);
+        }
+        setDeferredPrompt(null);
+        setShowInstallPrompt(false);
+      };
+
+      // Traduzioni
+      const translations = {
+        it: {
+          title: 'Padel Score',
+          sets: 'SET',
+          games: 'GAME',
+          activate: 'Clicca per attivare',
+          active: 'ATTIVO',
+          lastCommand: 'Ultimo comando:',
+          undo: 'ANNULLA',
+          editNames: 'Nomi Squadre',
+          team1: 'Squadra 1',
+          team2: 'Squadra 2',
+          save: 'Salva',
+          cancel: 'Annulla',
+          selectVoice: 'Seleziona Voce',
+          test: 'Prova',
+          use: 'Usa',
+          close: 'Chiudi',
+          activeVoice: 'VOCE ATTIVA:',
+          wins: 'VINCE!',
+          forty: 'Quaranta pari',
+          advantage: 'Vantaggio',
+          game: 'Game per',
+          gameAndSet: 'Game e set per',
+          winsSet: 'vince il set',
+          gamesTo: 'giochi a',
+          situationSets: 'Situazione set:',
+          inThisSet: 'in questo set',
+          match: 'Partita!',
+          winsMatch: 'vince l\'incontro',
+          setsTo: 'set a',
+          tiebreak: 'Sei giochi pari. Si va al tie-break!',
+          tiebreakWon: 'Tie-break vinto da',
+          newMatch: 'Nuova partita',
+          micActive: 'Microfono attivo. Buona partita!',
+          pointCanceled: 'Punto annullato',
+          noUndo: 'Nessuna azione da annullare',
+          namesSaved: 'Nomi salvati',
+          voiceSelected: 'Voce selezionata',
+          selectLanguage: 'Seleziona Lingua',
+          install: 'Installa App',
+          installDesc: 'Installa per usare offline',
+          offline: 'Offline - L\'app funziona comunque!',
+          sayTeam: 'Di\' il nome della squadra'
+        },
+        en: {
+          title: 'Padel Score',
+          sets: 'SETS',
+          games: 'GAMES',
+          activate: 'Click to activate',
+          active: 'ACTIVE',
+          lastCommand: 'Last command:',
+          undo: 'UNDO',
+          editNames: 'Team Names',
+          team1: 'Team 1',
+          team2: 'Team 2',
+          save: 'Save',
+          cancel: 'Cancel',
+          selectVoice: 'Select Voice',
+          test: 'Test',
+          use: 'Use',
+          close: 'Close',
+          activeVoice: 'ACTIVE VOICE:',
+          wins: 'WINS!',
+          forty: 'Deuce',
+          advantage: 'Advantage',
+          game: 'Game for',
+          gameAndSet: 'Game and set for',
+          winsSet: 'wins the set',
+          gamesTo: 'games to',
+          situationSets: 'Sets:',
+          inThisSet: 'in this set',
+          match: 'Match!',
+          winsMatch: 'wins the match',
+          setsTo: 'sets to',
+          tiebreak: 'Six all. Going to tiebreak!',
+          tiebreakWon: 'Tiebreak won by',
+          newMatch: 'New match',
+          micActive: 'Microphone active. Good luck!',
+          pointCanceled: 'Point canceled',
+          noUndo: 'Nothing to undo',
+          namesSaved: 'Names saved',
+          voiceSelected: 'Voice selected',
+          selectLanguage: 'Select Language',
+          install: 'Install App',
+          installDesc: 'Install to use offline',
+          offline: 'Offline - App still works!',
+          sayTeam: 'Say team name'
+        },
+        es: {
+          title: 'Padel Score',
+          sets: 'SETS',
+          games: 'JUEGOS',
+          activate: 'Pulsa para activar',
+          active: 'ACTIVO',
+          lastCommand: 'Último comando:',
+          undo: 'DESHACER',
+          editNames: 'Nombres Equipos',
+          team1: 'Equipo 1',
+          team2: 'Equipo 2',
+          save: 'Guardar',
+          cancel: 'Cancelar',
+          selectVoice: 'Seleccionar Voz',
+          test: 'Probar',
+          use: 'Usar',
+          close: 'Cerrar',
+          activeVoice: 'VOZ ACTIVA:',
+          wins: 'GANA!',
+          forty: 'Iguales',
+          advantage: 'Ventaja',
+          game: 'Juego para',
+          gameAndSet: 'Juego y set para',
+          winsSet: 'gana el set',
+          gamesTo: 'juegos a',
+          situationSets: 'Situación sets:',
+          inThisSet: 'en este set',
+          match: 'Partido!',
+          winsMatch: 'gana el partido',
+          setsTo: 'sets a',
+          tiebreak: 'Seis iguales. Vamos al tie-break!',
+          tiebreakWon: 'Tie-break ganado por',
+          newMatch: 'Nuevo partido',
+          micActive: 'Micrófono activo. Buena suerte!',
+          pointCanceled: 'Punto cancelado',
+          noUndo: 'Nada que deshacer',
+          namesSaved: 'Nombres guardados',
+          voiceSelected: 'Voz seleccionada',
+          selectLanguage: 'Seleccionar Idioma',
+          install: 'Instalar App',
+          installDesc: 'Instalar para usar sin conexión',
+          offline: 'Sin conexión - ¡La app funciona!',
+          sayTeam: 'Di el nombre del equipo'
+        },
+        fr: {
+          title: 'Padel Score',
+          sets: 'SETS',
+          games: 'JEUX',
+          activate: 'Cliquez pour activer',
+          active: 'ACTIF',
+          lastCommand: 'Dernière commande:',
+          undo: 'ANNULER',
+          editNames: 'Noms Équipes',
+          team1: 'Équipe 1',
+          team2: 'Équipe 2',
+          save: 'Sauvegarder',
+          cancel: 'Annuler',
+          selectVoice: 'Sélectionner Voix',
+          test: 'Tester',
+          use: 'Utiliser',
+          close: 'Fermer',
+          activeVoice: 'VOIX ACTIVE:',
+          wins: 'GAGNE!',
+          forty: 'Égalité',
+          advantage: 'Avantage',
+          game: 'Jeu pour',
+          gameAndSet: 'Jeu et set pour',
+          winsSet: 'remporte le set',
+          gamesTo: 'jeux à',
+          situationSets: 'Situation sets:',
+          inThisSet: 'dans ce set',
+          match: 'Match!',
+          winsMatch: 'remporte le match',
+          setsTo: 'sets à',
+          tiebreak: 'Six partout. Jeu décisif!',
+          tiebreakWon: 'Jeu décisif gagné par',
+          newMatch: 'Nouveau match',
+          micActive: 'Microphone actif. Bonne chance!',
+          pointCanceled: 'Point annulé',
+          noUndo: 'Rien à annuler',
+          namesSaved: 'Noms sauvegardés',
+          voiceSelected: 'Voix sélectionnée',
+          selectLanguage: 'Sélectionner Langue',
+          install: 'Installer App',
+          installDesc: 'Installer pour utiliser hors ligne',
+          offline: 'Hors ligne - L\'app fonctionne!',
+          sayTeam: 'Dites le nom de l\'équipe'
+        }
+      };
+
+      const t = translations[language];
+
+      // Save language preference
+      useEffect(() => {
+        localStorage.setItem('language', language);
+      }, [language]);
+
+      // Save team names
+      useEffect(() => {
+        localStorage.setItem('team1Name', team1Name);
+        localStorage.setItem('team2Name', team2Name);
+      }, [team1Name, team2Name]);
+
+      // Carica voci disponibili
+      useEffect(() => {
+        const loadVoices = () => {
+          const voices = window.speechSynthesis.getVoices();
+          setAvailableVoices(voices);
+          
+          if (!selectedVoice && voices.length > 0) {
+            const langPrefix = language === 'en' ? 'en' : language === 'es' ? 'es' : language === 'fr' ? 'fr' : 'it';
+            const googleMaleVoice = voices.find(v => 
+              v.lang.startsWith(langPrefix) && 
+              v.name.includes('Google') && 
+              (v.name.includes('Male') || !v.name.includes('Female'))
+            );
+            const anyVoice = voices.find(v => v.lang.startsWith(langPrefix));
+            setSelectedVoice(googleMaleVoice || anyVoice || voices[0]);
+          }
+        };
+        
+        loadVoices();
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+      }, [language, selectedVoice]);
+
+      const speak = (text) => {
+        if (!selectedVoice) return;
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.voice = selectedVoice;
+        utterance.rate = 0.9;
+        utterance.pitch = 1;
+        window.speechSynthesis.speak(utterance);
+      };
+
+      const getPointsDisplay = (points, opponentPoints) => {
+        if (isTieBreak) return points.toString();
+        
+        const pointNames = ['0', '15', '30', '40'];
+        
+        if (points >= 3 && opponentPoints >= 3) {
+          if (points === opponentPoints) return '40';
+          if (points > opponentPoints) return 'AD';
+          return '40';
+        }
+        
+        return pointNames[Math.min(points, 3)];
+      };
+
+      const saveState = () => {
+        setHistory(prev => [...prev, {
+          bluPoints, redPoints, bluGames, redGames, bluSets, redSets, isTieBreak
+        }]);
+      };
+
+      const addPoint = (team) => {
+        saveState();
+        
+        if (team === 'team1') {
+          processPoint(
+            bluPoints, redPoints, setBluPoints, setRedPoints,
+            bluGames, redGames, setBluGames, setRedGames,
+            bluSets, redSets, setBluSets, setRedSets,
+            team1Name, team2Name
+          );
+        } else {
+          processPoint(
+            redPoints, bluPoints, setRedPoints, setBluPoints,
+            redGames, bluGames, setRedGames, setBluGames,
+            redSets, bluSets, setRedSets, setBluSets,
+            team2Name, team1Name
+          );
+        }
+      };
+
+      const processPoint = (
+        scorerPoints, opponentPoints, setScorerPoints, setOpponentPoints,
+        scorerGames, opponentGames, setScorerGames, setOpponentGames,
+        scorerSets, opponentSets, setScorerSets, setOpponentSets,
+        scorerName, opponentName
+      ) => {
+        const newPoints = scorerPoints + 1;
+        
+        if (isTieBreak) {
+          if (newPoints >= 7 && newPoints - opponentPoints >= 2) {
+            speak(`${t.tiebreakWon} ${scorerName}. ${newPoints} ${t.gamesTo} ${opponentPoints}`);
+            setScorerSets(prev => prev + 1);
+            setScorerGames(7);
+            setScorerPoints(0);
+            setOpponentPoints(0);
+            setIsTieBreak(false);
+            
+            if (scorerSets + 1 >= 2) {
+              setMatchStatus(`🏆 ${scorerName} ${t.winsMatch}! ${scorerSets + 1} ${t.setsTo} ${opponentSets}`);
+              speak(`${t.match} ${scorerName} ${t.winsMatch} ${scorerSets + 1} ${t.setsTo} ${opponentSets}`);
+            }
+          } else {
+            setScorerPoints(newPoints);
+            speak(`${newPoints} - ${opponentPoints}`);
+          }
+          return;
+        }
+
+        // Logica normale
+        if (newPoints >= 4 && newPoints - opponentPoints >= 2) {
+          // Game vinto
+          const newGames = scorerGames + 1;
+          setScorerGames(newGames);
+          setScorerPoints(0);
+          setOpponentPoints(0);
+
+          // Check set
+          if (newGames >= 6 && newGames - opponentGames >= 2) {
+            const newSets = scorerSets + 1;
+            setScorerSets(newSets);
+            setScorerGames(0);
+            setOpponentGames(0);
+            
+            if (newSets >= 2) {
+              setMatchStatus(`🏆 ${scorerName} ${t.winsMatch}! ${newSets} ${t.setsTo} ${opponentSets}`);
+              speak(`${t.match} ${scorerName} ${t.winsMatch} ${newSets} ${t.setsTo} ${opponentSets}`);
+            } else {
+              speak(`${t.gameAndSet} ${scorerName}. ${newGames} ${t.gamesTo} ${opponentGames}. ${t.situationSets} ${newSets} ${t.setsTo} ${opponentSets}`);
+            }
+          } else if (newGames === 6 && opponentGames === 6) {
+            setIsTieBreak(true);
+            speak(t.tiebreak);
+          } else {
+            speak(`${t.game} ${scorerName}. ${newGames} ${t.gamesTo} ${opponentGames} ${t.inThisSet}`);
+          }
+        } else if (newPoints >= 3 && opponentPoints >= 3) {
+          setScorerPoints(newPoints);
+          if (newPoints === opponentPoints) {
+            speak(t.forty);
+          } else if (newPoints > opponentPoints) {
+            speak(`${t.advantage} ${scorerName}`);
+          }
+        } else {
+          setScorerPoints(newPoints);
+          const pointNames = { it: ['zero', 'quindici', 'trenta', 'quaranta'], en: ['love', 'fifteen', 'thirty', 'forty'], es: ['cero', 'quince', 'treinta', 'cuarenta'], fr: ['zéro', 'quinze', 'trente', 'quarante'] };
+          const names = pointNames[language];
+          speak(`${names[newPoints]} - ${names[opponentPoints]}`);
+        }
+      };
+
+      const undoLastPoint = () => {
+        if (history.length === 0) {
+          speak(t.noUndo);
+          return;
+        }
+        
+        const lastState = history[history.length - 1];
+        setBluPoints(lastState.bluPoints);
+        setRedPoints(lastState.redPoints);
+        setBluGames(lastState.bluGames);
+        setRedGames(lastState.redGames);
+        setBluSets(lastState.bluSets);
+        setRedSets(lastState.redSets);
+        setIsTieBreak(lastState.isTieBreak);
+        setMatchStatus('');
+        setHistory(prev => prev.slice(0, -1));
+        speak(t.pointCanceled);
+      };
+
+      const resetMatch = () => {
+        setBluPoints(0);
+        setRedPoints(0);
+        setBluGames(0);
+        setRedGames(0);
+        setBluSets(0);
+        setRedSets(0);
+        setIsTieBreak(false);
+        setHistory([]);
+        setMatchStatus('');
+        speak(t.newMatch);
+      };
+
+      const toggleListening = () => {
+        if (isListening) {
+          stopListening();
+        } else {
+          startListening();
+        }
+      };
+
+      const startListening = () => {
+        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+          setMicStatus('❌ Browser non supportato');
+          return;
+        }
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        
+        recognition.continuous = true;
+        recognition.interimResults = false;
+        recognition.lang = language === 'en' ? 'en-US' : language === 'es' ? 'es-ES' : language === 'fr' ? 'fr-FR' : 'it-IT';
+
+        recognition.onstart = () => {
+          setIsListening(true);
+          setMicStatus('🎤 ' + t.active);
+          speak(t.micActive);
+        };
+
+        recognition.onresult = (event) => {
+          const last = event.results.length - 1;
+          const command = event.results[last][0].transcript.toLowerCase().trim();
+          setLastCommand(command);
+          
+          const t1 = team1Name.toLowerCase();
+          const t2 = team2Name.toLowerCase();
+          
+          if (command.includes(t1) || command.includes('blu') || command.includes('blue')) {
+            addPoint('team1');
+          } else if (command.includes(t2) || command.includes('rosso') || command.includes('red') || command.includes('rojo')) {
+            addPoint('team2');
+          } else if (command.includes('annulla') || command.includes('undo') || command.includes('cancel') || command.includes('deshacer') || command.includes('annuler')) {
+            undoLastPoint();
+          } else if (command.includes('nuova') || command.includes('reset') || command.includes('new') || command.includes('nuevo') || command.includes('nouveau')) {
+            resetMatch();
+          }
+        };
+
+        recognition.onerror = (event) => {
+          console.error('Speech error:', event.error);
+          if (event.error !== 'no-speech') {
+            setMicStatus('⚠️ Errore: ' + event.error);
+          }
+        };
+
+        recognition.onend = () => {
+          if (isListening) {
+            recognition.start();
+          }
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+      };
+
+      const stopListening = () => {
+        if (recognitionRef.current) {
+          recognitionRef.current.stop();
+          recognitionRef.current = null;
+        }
+        setIsListening(false);
+        setMicStatus('🎤 ' + t.activate);
+      };
+
+      const openNameEditor = () => {
+        setTempTeam1Name(team1Name);
+        setTempTeam2Name(team2Name);
+        setShowNameEditor(true);
+      };
+
+      const saveTeamNames = () => {
+        if (tempTeam1Name.trim()) setTeam1Name(tempTeam1Name.trim().toUpperCase());
+        if (tempTeam2Name.trim()) setTeam2Name(tempTeam2Name.trim().toUpperCase());
+        setShowNameEditor(false);
+        speak(t.namesSaved);
+      };
+
+      const testVoice = (voice) => {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance('Quindici - zero. Game per la squadra blu.');
+        utterance.voice = voice;
+        utterance.rate = 0.9;
+        window.speechSynthesis.speak(utterance);
+      };
+
+      const selectVoice = (voice) => {
+        setSelectedVoice(voice);
+        speak(t.voiceSelected);
+      };
+
+      const changeLanguage = (lang) => {
+        setLanguage(lang);
+        setShowLanguagePanel(false);
+      };
+
+      return (
+        <div className="min-h-screen min-h-[100dvh] flex flex-col">
+          {/* Offline Banner */}
+          {!isOnline && (
+            <div className="offline-banner px-4 py-2 text-center text-white text-sm font-semibold">
+              📴 {t.offline}
+            </div>
+          )}
+          
+          {/* Install Banner */}
+          {showInstallPrompt && !isInstalled && (
+            <div className="install-banner px-4 py-3 flex items-center justify-between">
+              <div className="text-white">
+                <div className="font-bold text-sm">📲 {t.install}</div>
+                <div className="text-xs opacity-90">{t.installDesc}</div>
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setShowInstallPrompt(false)}
+                  className="px-3 py-1 text-white/80 text-sm"
+                >
+                  ✕
+                </button>
+                <button 
+                  onClick={installApp}
+                  className="px-4 py-1 bg-white text-green-600 rounded-full text-sm font-bold"
+                >
+                  {t.install}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex-1 p-4 max-w-md mx-auto w-full">
+            {/* Name Editor Modal */}
+            {showNameEditor && (
+              <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setShowNameEditor(false)}>
+                <div className="glass rounded-2xl p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+                  <h2 className="text-2xl font-bold text-white mb-4">✏️ {t.editNames}</h2>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-white/80 text-sm mb-2 block">{t.team1}</label>
+                      <input
+                        type="text"
+                        value={tempTeam1Name}
+                        onChange={(e) => setTempTeam1Name(e.target.value)}
+                        placeholder="Es: Marco & Luca"
+                        className="w-full px-4 py-3 rounded-xl bg-white/10 text-white border-2 border-blue-400 outline-none"
+                        maxLength={20}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-white/80 text-sm mb-2 block">{t.team2}</label>
+                      <input
+                        type="text"
+                        value={tempTeam2Name}
+                        onChange={(e) => setTempTeam2Name(e.target.value)}
+                        placeholder="Es: Paolo & Andrea"
+                        className="w-full px-4 py-3 rounded-xl bg-white/10 text-white border-2 border-red-400 outline-none"
+                        maxLength={20}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3 mt-6">
+                    <button
+                      onClick={() => setShowNameEditor(false)}
+                      className="py-3 rounded-xl bg-gray-600 hover:bg-gray-700 text-white font-semibold btn-press"
+                    >
+                      {t.cancel}
+                    </button>
+                    <button
+                      onClick={saveTeamNames}
+                      className="py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-semibold btn-press"
+                    >
+                      {t.save}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Voice Panel Modal */}
+            {showVoicePanel && (
+              <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 overflow-y-auto" onClick={() => setShowVoicePanel(false)}>
+                <div className="glass rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                  <h2 className="text-2xl font-bold text-white mb-2">🎙️ {t.selectVoice}</h2>
+                  
+                  {selectedVoice && (
+                    <div className="bg-green-500/20 border-2 border-green-400 rounded-xl p-3 mb-4">
+                      <div className="text-green-300 text-xs font-semibold mb-1">{t.activeVoice}</div>
+                      <div className="text-white text-sm font-bold">{selectedVoice.name}</div>
+                    </div>
+                  )}
+                  
+                  <div className="space-y-2 mb-4 max-h-96 overflow-y-auto">
+                    {availableVoices.filter(v => v.lang.startsWith(language === 'en' ? 'en' : language === 'es' ? 'es' : language === 'fr' ? 'fr' : 'it')).map((voice, index) => (
+                      <div key={index} className={`glass rounded-xl p-3 border-2 ${selectedVoice?.name === voice.name ? 'border-green-400' : 'border-white/10'}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1">
+                            <div className="text-white font-semibold text-sm">{voice.name}</div>
+                            <div className="text-white/60 text-xs">{voice.lang}</div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => testVoice(voice)}
+                              className="px-3 py-1.5 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold btn-press"
+                            >
+                              ▶
+                            </button>
+                            <button
+                              onClick={() => selectVoice(voice)}
+                              className="px-3 py-1.5 rounded-lg bg-green-500 hover:bg-green-600 text-white text-xs font-semibold btn-press"
+                            >
+                              ✓
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  
+                  <button
+                    onClick={() => setShowVoicePanel(false)}
+                    className="w-full py-3 rounded-xl bg-gray-600 hover:bg-gray-700 text-white font-semibold btn-press"
+                  >
+                    {t.close}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Language Panel Modal */}
+            {showLanguagePanel && (
+              <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50" onClick={() => setShowLanguagePanel(false)}>
+                <div className="glass rounded-2xl p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+                  <h2 className="text-2xl font-bold text-white mb-4">🌍 {t.selectLanguage}</h2>
+                  
+                  <div className="space-y-2">
+                    {[
+                      { code: 'it', flag: '🇮🇹', name: 'Italiano' },
+                      { code: 'en', flag: '🇬🇧', name: 'English' },
+                      { code: 'es', flag: '🇪🇸', name: 'Español' },
+                      { code: 'fr', flag: '🇫🇷', name: 'Français' }
+                    ].map((lang) => (
+                      <button
+                        key={lang.code}
+                        onClick={() => changeLanguage(lang.code)}
+                        className={`w-full py-3 px-4 rounded-xl text-left font-semibold flex items-center gap-3 btn-press ${language === lang.code ? 'bg-green-500 text-white' : 'bg-white/10 text-white hover:bg-white/20'}`}
+                      >
+                        <span className="text-2xl">{lang.flag}</span>
+                        <span>{lang.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                  
+                  <button
+                    onClick={() => setShowLanguagePanel(false)}
+                    className="w-full py-3 rounded-xl bg-gray-600 hover:bg-gray-700 text-white font-semibold mt-4 btn-press"
+                  >
+                    {t.close}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                <span>🎾</span>
+                <span className="score-font">{t.title}</span>
+              </h1>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowLanguagePanel(true)}
+                  className="w-10 h-10 rounded-xl glass hover:bg-white/20 text-white text-lg flex items-center justify-center btn-press"
+                >
+                  🌍
+                </button>
+                <button
+                  onClick={() => setShowVoicePanel(true)}
+                  className="w-10 h-10 rounded-xl glass hover:bg-white/20 text-white text-lg flex items-center justify-center btn-press"
+                >
+                  🎙️
+                </button>
+                <button
+                  onClick={openNameEditor}
+                  className="w-10 h-10 rounded-xl glass hover:bg-white/20 text-white text-lg flex items-center justify-center btn-press"
+                >
+                  ✏️
+                </button>
+              </div>
+            </div>
+
+            {/* Sets Display */}
+            <div className="glass rounded-xl p-4 mb-4">
+              <div className="text-white/60 text-xs text-center mb-2 tracking-widest">{t.sets}</div>
+              <div className="flex justify-center gap-8 text-white">
+                <div className="text-center">
+                  <div className="text-sm mb-1 text-blue-300">{team1Name}</div>
+                  <div className="text-4xl font-bold score-font">{bluSets}</div>
+                </div>
+                <div className="text-4xl font-bold text-white/40 score-font">-</div>
+                <div className="text-center">
+                  <div className="text-sm mb-1 text-red-300">{team2Name}</div>
+                  <div className="text-4xl font-bold score-font">{redSets}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Games Display */}
+            <div className="glass rounded-xl p-4 mb-4">
+              <div className="text-white/60 text-xs text-center mb-2 tracking-widest">{t.games}</div>
+              <div className="flex justify-center gap-8 text-white">
+                <div className="text-3xl font-bold score-font">{bluGames}</div>
+                <div className="text-3xl font-bold text-white/40 score-font">-</div>
+                <div className="text-3xl font-bold score-font">{redGames}</div>
+              </div>
+            </div>
+
+            {/* Points Display */}
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <button 
+                onClick={() => addPoint('team1')}
+                className="team-blu rounded-2xl p-6 text-center btn-press active:scale-95 transition-transform"
+              >
+                <div className="text-blue-200 text-xs font-semibold mb-2 tracking-wide">
+                  {isTieBreak ? `${team1Name} (TB)` : team1Name}
+                </div>
+                <div className="text-5xl font-bold text-white score-font">
+                  {getPointsDisplay(bluPoints, redPoints)}
+                </div>
+                <div className="text-blue-300 text-xs mt-2">+1</div>
+              </button>
+              <button 
+                onClick={() => addPoint('team2')}
+                className="team-red rounded-2xl p-6 text-center btn-press active:scale-95 transition-transform"
+              >
+                <div className="text-red-200 text-xs font-semibold mb-2 tracking-wide">
+                  {isTieBreak ? `${team2Name} (TB)` : team2Name}
+                </div>
+                <div className="text-5xl font-bold text-white score-font">
+                  {getPointsDisplay(redPoints, bluPoints)}
+                </div>
+                <div className="text-red-300 text-xs mt-2">+1</div>
+              </button>
+            </div>
+
+            {/* Match Status */}
+            {matchStatus && (
+              <div className="bg-yellow-500/20 border-2 border-yellow-400 rounded-xl p-4 mb-4 text-center">
+                <div className="text-yellow-200 text-lg font-bold">{matchStatus}</div>
+              </div>
+            )}
+
+            {/* Mic Button */}
+            <button
+              onClick={toggleListening}
+              className={`w-full py-6 rounded-2xl font-bold text-xl mb-4 flex flex-col items-center justify-center gap-2 transition-all btn-press ${
+                isListening 
+                  ? 'bg-green-500 text-white pulse-mic' 
+                  : 'glass text-white hover:bg-white/20'
+              }`}
+            >
+              <div className="text-4xl">{isListening ? '🎤' : '🎙️'}</div>
+              <div className="text-sm">{micStatus}</div>
+              {!isListening && <div className="text-xs opacity-70">{t.activate}</div>}
+            </button>
+
+            {/* Active Listening Indicator */}
+            {isListening && (
+              <div className="bg-green-500/20 border-2 border-green-400 rounded-xl p-3 mb-4 text-center">
+                <div className="text-green-200 text-sm font-bold">✅ {t.active}</div>
+                <div className="text-green-300 text-xs mt-1">{t.sayTeam}: "{team1Name}" / "{team2Name}"</div>
+              </div>
+            )}
+
+            {/* Last Command */}
+            {lastCommand && (
+              <div className="glass rounded-xl p-3 text-center mb-4">
+                <div className="text-white/60 text-xs">{t.lastCommand}</div>
+                <div className="text-white font-bold text-lg">"{lastCommand}"</div>
+              </div>
+            )}
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={undoLastPoint}
+                disabled={history.length === 0}
+                className={`py-3 rounded-xl font-semibold flex items-center justify-center gap-2 btn-press ${
+                  history.length === 0 
+                    ? 'bg-gray-500/30 text-gray-400' 
+                    : 'bg-orange-500 text-white'
+                }`}
+              >
+                ↩️ {t.undo} ({history.length})
+              </button>
+              <button
+                onClick={resetMatch}
+                className="py-3 rounded-xl font-semibold bg-gray-600 hover:bg-gray-700 text-white btn-press"
+              >
+                🔄 {t.newMatch}
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('app')).render(<PadelScorer />);
+  </script>
+  
+  <!-- Register Service Worker -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js')
+          .then(reg => console.log('SW registered:', reg.scope))
+          .catch(err => console.log('SW registration failed:', err));
+      });
+    }
+  </script>
+</body>
+</html>
